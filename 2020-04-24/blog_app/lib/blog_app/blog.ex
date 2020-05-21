@@ -42,14 +42,14 @@ defmodule BlogApp.Blog do
   def record_updated_posts(%Multi{} = multi, updated_changes),
     do: upsert_posts(multi, :update_posts, updated_changes)
 
-  def upsert_posts(%Multi{} = multi, _name, attrs) when is_nil(attrs),
+  def upsert_posts(%Multi{} = multi, _name, changes) when is_nil(changes),
     do: multi
 
-  def upsert_posts(%Multi{} = multi, name, attrs) do
+  def upsert_posts(%Multi{} = multi, name, changes) do
     now = DateTime.utc_now()
 
-    data =
-      attrs
+    posts =
+      changes
       |> Enum.map(fn row ->
         row
         |> Map.put("created_at", row["created_at"] * 1000 |> DateTime.from_unix!(:microsecond))
@@ -60,7 +60,7 @@ defmodule BlogApp.Blog do
         |> key_to_atom()
       end)
 
-    Multi.insert_all(multi, name, Post, data,
+    Multi.insert_all(multi, name, Post, posts,
       conflict_target: :id,
       on_conflict: {:replace_all_except, [:id, :version_created, :created_at_server, :deleted_at_server]},
       returning: true
@@ -80,13 +80,13 @@ defmodule BlogApp.Blog do
   def record_deleted_posts(%Multi{} = multi, deleted_ids, push_id) do
     now = DateTime.utc_now()
 
-    data =
+    posts =
       deleted_ids
       |> Enum.map(fn id ->
         %{id: id, deleted_at_server: now, push_id: push_id}
       end)
 
-    Multi.insert_all(multi, :delete_posts, Post, data,
+    Multi.insert_all(multi, :delete_posts, Post, posts,
       conflict_target: :id,
       on_conflict: {:replace, [:deleted_at_server, :version, :push_id]},
       returning: true
